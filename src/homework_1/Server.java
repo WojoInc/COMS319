@@ -11,7 +11,14 @@ public class Server {
     private LinkedList<Thread> clients;
     private boolean active;
     private Thread clientListener;
+    private String commandList = "help - display this usage\n" +
+            "active - activate server for accepting connections\n" +
+            "inactive - deactivate server for accepting connections\n" +
+            "quit - inactivate server and close\n";
 
+    private void printUsage() {
+        System.out.println(commandList);
+    }
     public ServerSocket getSocket() {
         return socket;
     }
@@ -71,6 +78,10 @@ public class Server {
     private void processCommand(String command) {
         switch (command.toUpperCase()) {
             case "ACTIVE":
+                if (isActive()) {
+                    System.out.println("Server is already active!");
+                    break;
+                }
                 setActive(true);
                 if (isActive()) {
                     System.out.println("Successfully activated client listener");
@@ -79,12 +90,19 @@ public class Server {
                 }
                 break;
             case "INACTIVE":
+                if (!isActive()) {
+                    System.out.println("Server is already inactive!");
+                    break;
+                }
                 setActive(false);
                 if (!isActive()) {
                     System.out.println("Successfully inactivated client listener");
                 } else {
                     System.out.println("Could not inactivate client listener");
                 }
+                break;
+            case "HELP":
+                printUsage();
                 break;
             case "QUIT":
                 System.out.println("Cleaning up and closing...");
@@ -136,6 +154,10 @@ class ClientThread implements Runnable {
 
     @Override
     public void run() {
+        printConnectionInfo();
+    }
 
+    public void printConnectionInfo() {
+        System.out.println("Client " + id + " remote address: " + socket.getRemoteSocketAddress());
     }
 }
