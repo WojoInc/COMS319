@@ -1,6 +1,8 @@
 package homework_1;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -10,27 +12,25 @@ import java.util.Scanner;
 public class Server {
     private ServerSocket socket;
     private InetSocketAddress saddr;
-    private LinkedList<Thread> clients;
+    private LinkedList<ClientThread> clients;
     private boolean active;
     private Thread clientListener;
     private String commandList = "help - display this usage\n" +
             "active - activate server for accepting connections\n" +
             "inactive - deactivate server for accepting connections\n" +
             "quit - inactivate server and close\n";
-
-    private void printUsage() {
-        System.out.println(commandList);
-    }
-    public ServerSocket getSocket() {
-        return socket;
-    }
+    private String welcome = "****Welcome to this simple chat server****";
 
     Server() throws IOException {
-        clients = new LinkedList<Thread>();
+        clients = new LinkedList<ClientThread>();
         active = false;
         saddr = null;
         socket = new ServerSocket();
         clientListener = null;
+    }
+
+    public ServerSocket getSocket() {
+        return socket;
     }
 
     public static void main(String[] args){
@@ -44,11 +44,19 @@ public class Server {
         Scanner s = new Scanner(System.in);
         System.out.println("Main server thread started: type 'active' to start listening for clients, 'help' for list of supported commands.");
         while (true) {
-            System.out.print(">> ");
+            server.printToServerAdmin(">> ");
             if (s.hasNext()) {
                 server.processCommand(s.next());
             }
         }
+    }
+
+    private synchronized void printUsage() {
+        System.out.println(commandList);
+    }
+
+    private synchronized void printToServerAdmin(String output) {
+        System.out.print(output);
     }
 
     public synchronized boolean isActive() {
@@ -57,12 +65,6 @@ public class Server {
 
     public void setAddress(String lhost, int lport) {
         saddr = new InetSocketAddress(lhost, lport);
-    }
-
-    private synchronized int acceptClient(Socket client) {
-        clients.add(new Thread(new ClientThread(client, clients.size())));
-        clients.peekLast().start();
-        return clients.size() - 1;
     }
 
     public synchronized void setActive(boolean active) throws IOException {
@@ -86,41 +88,68 @@ public class Server {
         }
     }
 
+    private synchronized void broadcast(String message) {
+        clients.forEach(client -> client.printToClient(message));
+    }
+
+    /**
+     * Similar to broadcast, but allows for specifying a client id that the message was sent from
+     * this id will be used to skip printing to the same client that sent the message.
+     *
+     * @param message  the message to broadcast
+     * @param clientid the id of the sending client
+     */
+    private synchronized void broadcast(String message, int clientid) {
+        //TODO print skipped client to log rather than server admin.
+        //TODO added verbose logging here
+        //TODO print to server UI as well
+        printToServerAdmin("Message from client id= " + clientid + " - " + message + "\n");
+        for (ClientThread c : clients) {
+            if (clientid != c.id) {
+                c.printToClient(message);
+            } else {
+                printToServerAdmin("Skipped broadcast to client id= " + clientid + "\n");
+            }
+            ;
+        }
+
+    }
+
     private void processCommand(String command) {
         try {
             switch (command.toUpperCase()) {
                 case "ACTIVE":
                     if (isActive()) {
-                        System.out.println("Server is already active!");
+                        printToServerAdmin("Server is already active!\n");
                         break;
                     }
                     setActive(true);
                     if (isActive()) {
-                        System.out.println("Successfully activated client listener");
+                        printToServerAdmin("Successfully activated client listener\n");
                     } else {
-                        System.out.println("Could not activate client listener");
+                        printToServerAdmin("Could not activate client listener\n");
                     }
                     break;
                 case "INACTIVE":
                     if (!isActive()) {
-                        System.out.println("Server is already inactive!");
+                        printToServerAdmin("Server is already inactive!\n");
                         break;
                     }
                     setActive(false);
                     if (!isActive()) {
-                        System.out.println("Successfully inactivated client listener");
+                        printToServerAdmin("Successfully inactivated client listener\n");
                     } else {
-                        System.out.println("Could not inactivate client listener");
+                        printToServerAdmin("Could not inactivate client listener\n");
                     }
                     break;
                 case "HELP":
                     printUsage();
                     break;
                 case "QUIT":
-                    System.out.println("Cleaning up and closing...");
+                    printToServerAdmin("Cleaning up and closing...\n");
                     System.exit(0);
                 default:
-                    System.out.println("Unrecognized command: '" + command + "' type 'help' for list of commands.");
+                    printToServerAdmin("Unrecognized command: '" + command + "' type 'help' for list of commands.\n");
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -134,6 +163,12 @@ public class Server {
         ClientListener() {
         }
 
+        private synchronized int acceptClient(Socket client) {
+            clients.add(new ClientThread(client, clients.size()));
+            clients.peekLast().start();
+            return clients.size() - 1;
+        }
+
         @Override
         public void run() {
         /*
@@ -141,39 +176,80 @@ public class Server {
          * clients is only locked by this thread once when adding a client, allowing the admin thread or an admin
          * client to issue moderator commands without this thread interfering
          */
-            System.out.println("Waiting for new clients...");
+            printToServerAdmin("Waiting for new clients...\n");
             try {
                 int id = 0;
                 while (isActive()) {
                     id = acceptClient(socket.accept());
-                    System.out.println("Accepted new client with ID= " + id);
-                    System.out.println("Waiting for new clients...");
+                    printToServerAdmin("Accepted new client with ID= " + id + "\n");
+                    printToServerAdmin("Waiting for new clients...\n");
                 }
             } catch (IOException ex) {
-                System.out.println("Error accepting new client!");
+                printToServerAdmin("Error accepting new client!\n");
             }
         }
     }
 
-}
+    class ClientThread extends Thread {
 
+        private Socket socket;
+        private int id;
+        private Scanner in;
+        private PrintWriter out;
+        private String name;
 
-class ClientThread implements Runnable {
+        ClientThread(Socket sock, int id) {
+            this.socket = sock;
+            this.id = id;
+        }
 
-    private Socket socket;
-    private int id;
+        @Override
+        public void run() {
+            printConnectionInfo();
+            try {
+                in = new Scanner(new BufferedInputStream(socket.getInputStream()));
+                out = new PrintWriter(socket.getOutputStream());
+                printWelcomeMessage();
+                namePrompt();
+                name = in.nextLine();
+                while (socket.isConnected()) {
+                    if (in.hasNextLine()) processClientCommand(in.nextLine());
+                }
+            } catch (IOException e) {
+                printToServerAdmin(e.getMessage());
+            }
+        }
 
-    ClientThread(Socket sock, int id) {
-        this.socket = sock;
-        this.id = id;
-    }
+        private void processClientCommand(String command) {
+            //check if first part of the command is a valid command
+            String[] cmd = command.toUpperCase().split(" ");
+            switch (cmd[0]) {
+                case "TEXT":
+                    broadcast(in.nextLine(), this.id);
+                    break;
+                case "IMAGE":
+                    break;
+                default:
+            }
+        }
 
-    @Override
-    public void run() {
-        printConnectionInfo();
-    }
+        private void namePrompt() {
+            out.println("Enter your Name: (Type in your name, then press Enter) ");
+            out.flush();
+        }
 
-    public void printConnectionInfo() {
-        System.out.println("Client " + id + " remote address: " + socket.getRemoteSocketAddress());
+        private void printWelcomeMessage() {
+            out.println(welcome);
+            out.flush();
+        }
+
+        private void printConnectionInfo() {
+            printToServerAdmin("Client " + id + " remote address: " + socket.getRemoteSocketAddress() + "\n");
+        }
+
+        public synchronized void printToClient(String message) {
+            out.print(message);
+            out.flush();
+        }
     }
 }
