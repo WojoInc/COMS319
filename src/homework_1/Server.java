@@ -1,6 +1,7 @@
 package homework_1;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.LinkedList;
@@ -8,6 +9,7 @@ import java.util.Scanner;
 
 public class Server {
     private ServerSocket socket;
+    private InetSocketAddress saddr;
     private LinkedList<Thread> clients;
     private boolean active;
     private Thread clientListener;
@@ -23,29 +25,29 @@ public class Server {
         return socket;
     }
 
-    public void setSocket(ServerSocket socket) {
-        this.socket = socket;
-    }
-
-    Server() {
+    Server() throws IOException {
         clients = new LinkedList<Thread>();
         active = false;
-        socket = null;
+        saddr = null;
+        socket = new ServerSocket();
         clientListener = null;
     }
 
     public static void main(String[] args){
-        Server server = new Server();
+        Server server = null;
         try {
-            server.setSocket(new ServerSocket(4444));
-        } catch(IOException ex){
-            ex.printStackTrace();
+            server = new Server();
+            server.setAddress("localhost", 4444);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
         Scanner s = new Scanner(System.in);
         System.out.println("Main server thread started: type 'active' to start listening for clients, 'help' for list of supported commands.");
         while (true) {
             System.out.print(">> ");
-            server.processCommand(s.next());
+            if (s.hasNext()) {
+                server.processCommand(s.next());
+            }
         }
     }
 
@@ -53,20 +55,8 @@ public class Server {
         return active;
     }
 
-    public synchronized void setActive(boolean active) {
-        this.active = active;
-        if (active) {
-            clientListener = new Thread(new ClientListener());
-            clientListener.start();
-        } else {
-            //Remove the client listener when not active, force garbage collection and remove clients
-            //This allows restarting the server's connection to clean clients array
-            clientListener.stop();
-            clientListener = null;
-            clients.forEach(client -> client = null);
-            clients = null;
-            System.gc();
-        }
+    public void setAddress(String lhost, int lport) {
+        saddr = new InetSocketAddress(lhost, lport);
     }
 
     private synchronized int acceptClient(Socket client) {
@@ -75,40 +65,65 @@ public class Server {
         return clients.size() - 1;
     }
 
+    public synchronized void setActive(boolean active) throws IOException {
+        this.active = active;
+        if (active) {
+            clientListener = new Thread(new ClientListener());
+            if (socket.isClosed()) {
+                socket = new ServerSocket();
+            }
+            socket.bind(saddr);
+            clientListener.start();
+        } else {
+            //Remove the client listener when not active, force garbage collection and remove clients
+            //This allows restarting the server's connection to clean clients array
+            clientListener.stop();
+            socket.close();
+
+            clientListener = null;
+            clients.clear();
+            System.gc();
+        }
+    }
+
     private void processCommand(String command) {
-        switch (command.toUpperCase()) {
-            case "ACTIVE":
-                if (isActive()) {
-                    System.out.println("Server is already active!");
+        try {
+            switch (command.toUpperCase()) {
+                case "ACTIVE":
+                    if (isActive()) {
+                        System.out.println("Server is already active!");
+                        break;
+                    }
+                    setActive(true);
+                    if (isActive()) {
+                        System.out.println("Successfully activated client listener");
+                    } else {
+                        System.out.println("Could not activate client listener");
+                    }
                     break;
-                }
-                setActive(true);
-                if (isActive()) {
-                    System.out.println("Successfully activated client listener");
-                } else {
-                    System.out.println("Could not activate client listener");
-                }
-                break;
-            case "INACTIVE":
-                if (!isActive()) {
-                    System.out.println("Server is already inactive!");
+                case "INACTIVE":
+                    if (!isActive()) {
+                        System.out.println("Server is already inactive!");
+                        break;
+                    }
+                    setActive(false);
+                    if (!isActive()) {
+                        System.out.println("Successfully inactivated client listener");
+                    } else {
+                        System.out.println("Could not inactivate client listener");
+                    }
                     break;
-                }
-                setActive(false);
-                if (!isActive()) {
-                    System.out.println("Successfully inactivated client listener");
-                } else {
-                    System.out.println("Could not inactivate client listener");
-                }
-                break;
-            case "HELP":
-                printUsage();
-                break;
-            case "QUIT":
-                System.out.println("Cleaning up and closing...");
-                System.exit(0);
-            default:
-                System.out.println("Unrecognized command: '" + command + "' type 'help' for list of commands.");
+                case "HELP":
+                    printUsage();
+                    break;
+                case "QUIT":
+                    System.out.println("Cleaning up and closing...");
+                    System.exit(0);
+                default:
+                    System.out.println("Unrecognized command: '" + command + "' type 'help' for list of commands.");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
@@ -126,12 +141,13 @@ public class Server {
          * clients is only locked by this thread once when adding a client, allowing the admin thread or an admin
          * client to issue moderator commands without this thread interfering
          */
+            System.out.println("Waiting for new clients...");
             try {
                 int id = 0;
                 while (isActive()) {
-                    System.out.println("Waiting for new clients...");
                     id = acceptClient(socket.accept());
                     System.out.println("Accepted new client with ID= " + id);
+                    System.out.println("Waiting for new clients...");
                 }
             } catch (IOException ex) {
                 System.out.println("Error accepting new client!");

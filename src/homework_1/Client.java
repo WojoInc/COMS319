@@ -36,6 +36,10 @@ public class Client {
     //TODO add custom exception for server being alive but not actively accepting connections. use socket.isAlive() to test this
     public void connect() throws IOException {
         socket = new Socket(rhost, rport);
+        if (!socket.isConnected()) {
+            socket.close();
+            throw new IOException("Could not connect to server!");
+        }
     }
 
     class ConnectionThread implements Runnable {
