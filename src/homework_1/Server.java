@@ -1,11 +1,10 @@
 package homework_1;
 
-import java.io.BufferedInputStream;
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.channels.FileChannel;
 import java.util.LinkedList;
 import java.util.Scanner;
 
@@ -196,6 +195,64 @@ public class Server {
             }
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    class ServerLogger extends Thread {
+        String logFilePath, chatlogFilePath;
+        File serverLog, chatLog;
+        FileWriter sWriter, cWriter;
+        FileOutputStream sOutStream, cOutStream;
+        FileChannel sChannel, cChannel;
+        boolean serverActive;
+        LOG_LEVEL log_level;
+
+        ServerLogger(String logFilePath, String chatlogFilePath, LOG_LEVEL log_level) {
+            this.logFilePath = logFilePath;
+            this.chatlogFilePath = chatlogFilePath;
+            this.log_level = log_level;
+        }
+
+        public void setServerActive(boolean serverActive) {
+            this.serverActive = serverActive;
+            if (serverActive) {
+                sChannel = sOutStream.getChannel();
+                try {
+                    sChannel.position(sChannel.size());
+                    sChannel.tryLock();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        public void log(String message) {
+
+        }
+
+        public void setup() throws IOException {
+            serverLog.createNewFile(); // will only create if not already existing
+            chatLog.createNewFile();
+            sOutStream = new FileOutputStream(serverLog, true);
+        }
+
+        @Override
+        public void run() {
+            serverLog = new File(logFilePath);
+            chatLog = new File(chatlogFilePath);
+
+            try {
+                setup();
+
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            while (this.isAlive()) {
+                if (!serverActive) {
+
+                }
+            }
         }
     }
 
