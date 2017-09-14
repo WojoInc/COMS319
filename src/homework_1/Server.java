@@ -1,10 +1,14 @@
 package homework_1;
 
-import java.io.*;
+import java.io.BufferedInputStream;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.channels.FileChannel;
+import java.nio.charset.Charset;
+import java.nio.file.*;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.Scanner;
@@ -19,7 +23,6 @@ public class Server {
     private LinkedList<ClientThread> clients;
     private ServerLogger logger;
     private boolean active;
-    private LOG_LEVEL loglevel;
     private Thread clientListener;
     private String commandList = "help - display this usage\n" +
             "active - activate server for accepting connections\n" +
@@ -33,6 +36,7 @@ public class Server {
         saddr = null;
         socket = null;
         clientListener = null;
+        logger = null;
     }
 
     public static void main(String[] args){
@@ -40,18 +44,21 @@ public class Server {
         Server server = null;
         server = new Server();
         server.setAddress("localhost", 4444);
-        server.setLoglevel(LOG_LEVEL.VERBOSE);
-        server.setLogFile("log/serverlog.txt");
-        server.setChatLogFile("log/log.txt");
+        server.addServerLogger(new ServerLogger("serverlog.txt", "chat.txt", LOG_LEVEL.VERBOSE));
         //create admin console
         Scanner s = new Scanner(System.in);
-        System.out.println("Main server thread started: type 'active' to start listening for clients, 'help' for list of supported commands.");
+        server.printToServerAdminUI("Main server thread started: type 'active' to start listening for clients, 'help' for list of supported commands.\n");
         while (true) {
             server.printToServerAdminUI(">> ");
             if (s.hasNext()) {
                 server.processCommand(s.next());
             }
         }
+    }
+
+    public void addServerLogger(ServerLogger logger) {
+        this.logger = logger;
+        logger.start();
     }
 
     public ServerSocket getSocket() {
@@ -63,18 +70,7 @@ public class Server {
     }
 
     private synchronized void printToServerAdminUI(String output) {
-        switch (loglevel) {
-            case NONE:
-                System.out.print(output);
-                break;
-            case CHAT:
-                System.out.print(output);
-                break;
-            case VERBOSE:
-                System.out.print(output);
-                break;
-
-        }
+        System.out.print(output);
     }
 
     public synchronized boolean isActive() {
@@ -94,12 +90,15 @@ public class Server {
             }
             socket.bind(saddr);
             clientListener.start();
+            logger.setActive(true);
+            logger.log("Server set active.");
         } else {
             //Remove the client listener when not active, force garbage collection and remove clients
             //This allows restarting the server's connection to clean clients array
+            logger.log("Server set inactive.");
             clientListener.stop();
             socket.close();
-
+            logger.setActive(false);
             clientListener = null;
             clients.clear();
             System.gc();
@@ -118,17 +117,33 @@ public class Server {
      * @param clientInfo the info of the sending client
      */
     private synchronized void broadcast(String message, ClientInfo clientInfo) {
-        //TODO print skipped client to log rather than server admin.
-        //TODO added verbose logging here
+
         printToServerAdminUI("Message from client: " + clientInfo.name +
                 " id: " + clientInfo.clientID + " -- " + message + "\n");
+        try {
+            logger.logChat(message, clientInfo);
+        } catch (IOException ex) {
+            printToServerAdminUI("Could not write to chatlog!");
+        }
         for (ClientThread c : clients) {
             if (clientInfo.clientID != c.id) {
                 c.printToClient(clientInfo.name + ":" + message);
             } else {
-                printToServerAdminUI("Skipped broadcast to client id: " + clientInfo.clientID + "\n");
+                printToServerAdminUI("Skipped broadcast to sending client id: " + clientInfo.clientID + "\n");
+                try {
+                    logger.log("Skipped message broadcast to sending client id: " + clientInfo.clientID);
+                } catch (IOException ex) {
+                    printToServerAdminUI("Could not write to logfile!");
+                }
+
             }
         }
+    }
+
+    private void cleanup() throws IOException {
+        broadcast("Server is going down...");
+        setActive(false);
+        logger.cleanup();
     }
 
     private void processCommand(String command) {
@@ -163,6 +178,7 @@ public class Server {
                     break;
                 case "QUIT":
                     printToServerAdminUI("Cleaning up and closing...\n");
+                    cleanup();
                     System.exit(0);
                 default:
                     printToServerAdminUI("Unrecognized command: '" + command + "' type 'help' for list of commands.\n");
@@ -172,96 +188,7 @@ public class Server {
         }
     }
 
-    class ServerLogger extends Thread {
-        String logFilePath, chatlogFilePath;
-        File serverLog, chatLog;
-        Date date;
-        FileWriter sWriter, cWriter;
-        FileOutputStream sOutStream, cOutStream;
-        FileChannel sChannel, cChannel;
-        boolean serverActive;
-        LOG_LEVEL log_level;
-
-        ServerLogger(String logFilePath, String chatlogFilePath, LOG_LEVEL log_level) {
-            this.logFilePath = logFilePath;
-            this.chatlogFilePath = chatlogFilePath;
-            this.log_level = log_level;
-            this.date = new Date();
-        }
-
-        public void setServerActive(boolean serverActive) {
-            this.serverActive = serverActive;
-            if (serverActive) {
-                sChannel = sOutStream.getChannel();
-                try {
-                    sChannel.tryLock();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        public void log(String message) {
-            try {
-                sChannel.position(sChannel.size());
-
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        public void logChat(String message, ClientInfo clientInfo) {
-            try {
-                cChannel.position(cChannel.size());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        public void setup() throws IOException {
-            serverLog.createNewFile(); // will only create if not already existing
-            chatLog.createNewFile();
-            sOutStream = new FileOutputStream(serverLog, true);
-        }
-
-        @Override
-        public void run() {
-            serverLog = new File(logFilePath);
-            chatLog = new File(chatlogFilePath);
-
-            try {
-                setup();
-
-
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            while (this.isAlive()) {
-                if (!serverActive) {
-
-                }
-            }
-        }
-    }
-
-    class ClientInfo {
-        public String name;
-        public int clientID;
-        public String address;
-
-        public ClientInfo(String name, int clientID, String address) {
-            this.name = name;
-            this.clientID = clientID;
-            this.address = address;
-        }
-    }
-
     class ClientListener implements Runnable {
-
-        /*  private Server mainServer;
-          ClientListener(Server mainServer){this.mainServer = mainServer;}*/
-        ClientListener() {
-        }
 
         private synchronized int acceptClient(Socket client) {
             clients.add(new ClientThread(client, clients.size()));
@@ -282,10 +209,17 @@ public class Server {
                 while (isActive()) {
                     id = acceptClient(socket.accept());
                     printToServerAdminUI("Accepted new client with ID= " + id + "\n");
+                    logger.log("Accepted new client with ID= " + id);
                     printToServerAdminUI("Waiting for new clients...\n");
                 }
             } catch (IOException ex) {
                 printToServerAdminUI("Error accepting new client!\n");
+                try {
+                    logger.log("Error accepting new client!");
+                } catch (IOException e) {
+                    printToServerAdminUI("Could not write to logfile!");
+                }
+
             }
         }
     }
@@ -338,9 +272,6 @@ public class Server {
             }
         }
 
-        public String getClientName() {
-            return name;
-        }
         private void namePrompt() {
             out.println("Enter your Name: (Type in your name, then press Enter) ");
             out.flush();
@@ -359,5 +290,114 @@ public class Server {
             out.println(message);
             out.flush();
         }
+    }
+}
+
+class ServerLogger extends Thread {
+    private Path logFilePath, chatlogFilePath;
+    private Date date;
+    private BufferedWriter sWriter, cWriter;
+    private boolean serverActive;
+    private LOG_LEVEL log_level;
+    private long message_count;
+
+    ServerLogger(String logFilePath, String chatlogFilePath, LOG_LEVEL log_level) {
+        this.logFilePath = Paths.get(logFilePath).toAbsolutePath();
+        this.chatlogFilePath = Paths.get(chatlogFilePath).toAbsolutePath();
+        this.log_level = log_level;
+        this.date = new Date();
+        this.message_count = 0;
+    }
+
+    public void setActive(boolean serverActive) {
+        this.serverActive = serverActive;
+        if (serverActive) {
+            try {
+                Files.createFile(chatlogFilePath);
+            } catch (FileAlreadyExistsException e) {
+                //ignore as we don't care if file already exists as we are appending
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+
+            try {
+                cWriter = Files.newBufferedWriter(chatlogFilePath, Charset.forName("UTF-8"), StandardOpenOption.APPEND);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+        } else {
+            try {
+                cWriter.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public void log(String message) throws IOException {
+        if (log_level == LOG_LEVEL.VERBOSE) {
+            //uses line.separator to deal with stupid windows and stupid notepad being stupid.
+            sWriter.write(date + ": " + message + System.getProperty("line.separator"));
+            sWriter.flush();
+        }
+    }
+
+    public void logChat(String message, ClientInfo clientInfo) throws IOException {
+        if ((log_level == LOG_LEVEL.CHAT) || (log_level == LOG_LEVEL.VERBOSE)) {
+            //uses line.separator to deal with stupid windows and stupid notepad being stupid.
+            cWriter.write(message_count + ": " + date + " - " + clientInfo.name + ":" + message + System.getProperty("line.separator"));
+            cWriter.flush();
+            message_count++;
+        }
+    }
+
+    public void cleanup() {
+        try {
+            cWriter.close();
+            sWriter.write(date + ": Server is going down." + System.getProperty("line.separator"));
+            sWriter.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void setup() {
+        try {
+            Files.createFile(logFilePath);
+
+        } catch (FileAlreadyExistsException ex) {
+            //ignore because we're appending
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        try {
+            sWriter = Files.newBufferedWriter(logFilePath, Charset.forName("UTF-8"), StandardOpenOption.APPEND);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void run() {
+
+        setup();
+        while (this.isAlive()) {
+            if (!serverActive) {
+
+            }
+        }
+    }
+}
+
+class ClientInfo {
+    public String name;
+    public int clientID;
+    public String address;
+
+    public ClientInfo(String name, int clientID, String address) {
+        this.name = name;
+        this.clientID = clientID;
+        this.address = address;
     }
 }
