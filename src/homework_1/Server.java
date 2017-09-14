@@ -5,6 +5,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.channels.FileChannel;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.Scanner;
 
@@ -16,11 +17,7 @@ public class Server {
     private ServerSocket socket;
     private InetSocketAddress saddr;
     private LinkedList<ClientThread> clients;
-    private long msg_num;
-    private String logFile;
-    private String chatLogFile;
-    private PrintWriter logWriter;
-    private PrintWriter chatLogWriter;
+    private ServerLogger logger;
     private boolean active;
     private LOG_LEVEL loglevel;
     private Thread clientListener;
@@ -57,24 +54,8 @@ public class Server {
         }
     }
 
-    public void setLogFile(String logFile) {
-        this.logFile = logFile;
-    }
-
-    public void setChatLogFile(String chatLogFile) {
-        this.chatLogFile = chatLogFile;
-    }
-
-    public LOG_LEVEL getLoglevel() {
-        return loglevel;
-    }
-
     public ServerSocket getSocket() {
         return socket;
-    }
-
-    public void setLoglevel(LOG_LEVEL loglevel) {
-        this.loglevel = loglevel;
     }
 
     private synchronized void printUsage() {
@@ -129,13 +110,6 @@ public class Server {
         clients.forEach(client -> client.printToClient("SERVER: " + message));
     }
 
-    private void updateServerLog() {
-
-    }
-
-    private void updateChatLog() {
-
-    }
     /**
      * Similar to broadcast, but allows for specifying a client id that the message was sent from
      * this id will be used to skip printing to the same client that sent the message.
@@ -201,6 +175,7 @@ public class Server {
     class ServerLogger extends Thread {
         String logFilePath, chatlogFilePath;
         File serverLog, chatLog;
+        Date date;
         FileWriter sWriter, cWriter;
         FileOutputStream sOutStream, cOutStream;
         FileChannel sChannel, cChannel;
@@ -211,6 +186,7 @@ public class Server {
             this.logFilePath = logFilePath;
             this.chatlogFilePath = chatlogFilePath;
             this.log_level = log_level;
+            this.date = new Date();
         }
 
         public void setServerActive(boolean serverActive) {
@@ -218,7 +194,6 @@ public class Server {
             if (serverActive) {
                 sChannel = sOutStream.getChannel();
                 try {
-                    sChannel.position(sChannel.size());
                     sChannel.tryLock();
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -227,7 +202,20 @@ public class Server {
         }
 
         public void log(String message) {
+            try {
+                sChannel.position(sChannel.size());
 
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        public void logChat(String message, ClientInfo clientInfo) {
+            try {
+                cChannel.position(cChannel.size());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
 
         public void setup() throws IOException {
