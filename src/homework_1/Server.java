@@ -1,14 +1,14 @@
 package homework_1;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.Charset;
 import java.nio.file.*;
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.Scanner;
@@ -140,6 +140,10 @@ public class Server {
         }
     }
 
+    private String getServerTime() {
+        return logger.getSimpleTime();
+    }
+
     private void cleanup() throws IOException {
         broadcast("Server is going down...");
         setActive(false);
@@ -189,8 +193,29 @@ public class Server {
     }
 
     class ClientListener implements Runnable {
+        private Scanner id_reader;
 
         private synchronized int acceptClient(Socket client) {
+            //check if new connection is a secondary connection opened for client data xfer
+            try {
+                id_reader = new Scanner(client.getInputStream());
+                if (id_reader.hasNextInt()) {
+                    int clid = id_reader.nextInt();
+                    //make sure received int wont cause an IndexOutOfBoundsException
+                    if ((clid >= 0) && (clid < clients.size())) {
+                        if (clients.get(clid).dataXferRequested) {
+                            clients.get(clid).dataSocket = client;
+                            return clients.size() - 1;
+                        }
+                        client.close();
+                        return clients.size() - 1;
+                    }
+
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
             clients.add(new ClientThread(client, clients.size()));
             clients.peekLast().start();
             return clients.size() - 1;
@@ -227,6 +252,13 @@ public class Server {
     class ClientThread extends Thread {
 
         private Socket socket;
+        private Socket dataSocket;
+        private InputStream dataInput;
+        private String file_recv_name;
+        private Path file_recv_path;
+        private BufferedImage recv_img;
+        private boolean dataXferRequested;
+        private boolean data_isReceiving;
         private ClientInfo info;
         private int id;
         private Scanner in;
@@ -235,6 +267,9 @@ public class Server {
 
         ClientThread(Socket sock, int id) {
             this.socket = sock;
+            this.dataSocket = null;
+            this.file_recv_name = "";
+            this.dataXferRequested = false;
             this.id = id;
         }
 
@@ -252,7 +287,12 @@ public class Server {
                 info = new ClientInfo(name, id, socket.getRemoteSocketAddress() + ":" + socket.getPort());
 
                 while (socket.isConnected()) {
+                    if (dataSocket != null && dataSocket.isConnected() && !data_isReceiving) {
+                        printToClient("IMG_RDY");
+                        data_isReceiving = true;
+                    }
                     if (in.hasNextLine()) processClientCommand(in.nextLine());
+
                 }
             } catch (IOException e) {
                 printToServerAdminUI(e.getMessage());
@@ -267,9 +307,62 @@ public class Server {
                     broadcast(in.nextLine(), this.info);
                     break;
                 case "IMAGE":
+                    dataXferRequested = true;
+                    file_recv_name = in.nextLine();
+                    printToClient("IMG_ACK " + info.clientID);
                     break;
+                case "IMG_SEND":
+                    if (dataXferRequested) processImage();
                 default:
             }
+        }
+
+        private void cleanupDataConnection() {
+            try {
+                dataSocket.close();
+                dataXferRequested = false;
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        private void processImage() {
+            try {
+                recv_img = ImageIO.read(ImageIO.createImageInputStream(dataSocket.getInputStream()));
+
+            } catch (IOException e) {
+                e.printStackTrace();
+                printToClient("An error occurred in transferring image: " + file_recv_name);
+                cleanupDataConnection();
+            }
+            broadcast("Received file from " + info.name + ": " + file_recv_name);
+
+            try {
+                Files.createDirectory(Paths.get("image"));
+            } catch (FileAlreadyExistsException ex) {
+                //Ignore, as we are creating directory only if not existing
+            } catch (IOException e) {
+                e.printStackTrace();
+                printToClient("An error occurred in transferring image: " + file_recv_name);
+                cleanupDataConnection();
+            }
+            try {
+                file_recv_path = Paths.get("image/" + info.name + "_" + file_recv_name + "_" + getServerTime());
+                Files.createFile(file_recv_path);
+            } catch (FileAlreadyExistsException ex) {
+                printToClient("Cannot upload: File already exists! " + file_recv_name);
+                cleanupDataConnection();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            try {
+                ImageIO.write(recv_img, "png", Files.newOutputStream(file_recv_path, StandardOpenOption.WRITE));
+                printToClient("IMG_OK");
+            } catch (IOException e) {
+                e.printStackTrace();
+                printToClient("An error occurred in transferring image: " + file_recv_name);
+            }
+            cleanupDataConnection();
         }
 
         private void namePrompt() {
@@ -307,6 +400,10 @@ class ServerLogger extends Thread {
         this.log_level = log_level;
         this.date = new Date();
         this.message_count = 0;
+    }
+
+    public String getSimpleTime() {
+        return new SimpleDateFormat("HHmmss").format(date);
     }
 
     public void setActive(boolean serverActive) {
