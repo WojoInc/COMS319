@@ -126,7 +126,7 @@ public class Server {
             printToServerAdminUI("Could not write to chatlog!");
         }
         for (ClientThread c : clients) {
-            if (clientInfo.clientID != c.id) {
+            if (clientInfo.clientID != c.info.clientID) {
                 c.printToClient(clientInfo.name + ":" + message);
             } else {
                 printToServerAdminUI("Skipped broadcast to sending client id: " + clientInfo.clientID + "\n");
@@ -143,9 +143,9 @@ public class Server {
     private synchronized void broadcast(BufferedImage img, String serverFileName, ClientInfo clientInfo) {
         ImageDescriptor id = new ImageDescriptor(serverFileName);
         for (ClientThread c : clients) {
-            if (clientInfo.clientID != c.id) {
+            if (clientInfo.clientID != c.info.clientID) {
                 try {
-                    c.imageToClient(img, id);
+                    c.queueImageXfer(img, id);
                 } catch (IOException ex) {
                     try {
                         logger.log("Could not send image to client id: " + c.info.clientID + "\n");
@@ -263,8 +263,9 @@ public class Server {
         private String file_recv_name;
         private Path file_recv_path;
         private BufferedImage recv_img;
+        private BufferedImage send_img;
+        private ImageDescriptor send_img_id;
         private boolean dataXferRequested;
-        private boolean data_isReceiving;
         private ClientInfo info;
         private int id;
         private Scanner in;
@@ -317,12 +318,30 @@ public class Server {
                     break;
                 case "IMG_SEND":
                     if (dataXferRequested) processImage();
+                case "IMG_ACK":
+                    imageToClient();
+                case "IMG_OK":
+                    try {
+                        logger.log("Client " + info.name + ":" + info.clientID + ": Accepted Image Successfully");
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 default:
             }
         }
 
+        private synchronized void imageToClient() {
+            try {
+                logger.log("Client " + info.name + ":" + info.clientID + ": Acknowledged Image Xfer. Sending...");
+                printToClient("IMG_SEND");
+                ImageIO.write(send_img, send_img_id.getExtension(), oStream);
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        }
+
         private String createImageFilename(ImageDescriptor id) {
-            return "image/" + info.name + "_" + id.getFilename() + "_" + getServerTime() + "." + id.getExtension();
+            return "image/" + id.getFilename() + "_" + info.name + "_" + getServerTime() + "." + id.getExtension();
         }
 
         private void processImage() {
@@ -370,8 +389,13 @@ public class Server {
                 e.printStackTrace();
                 printToClient("An error occurred in transferring image: " + file_recv_name);
             }
+            try {
+                logger.logChat(file_recv_path.toString(), info);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
 
-            broadcast(recv_img, imgID.getFilename() + "." + imgID.getExtension(), info);
+            broadcast(recv_img, file_recv_path.toString().substring(6), info);
         }
 
         private void namePrompt() {
@@ -393,15 +417,11 @@ public class Server {
             out.flush();
         }
 
-        public synchronized void imageToClient(BufferedImage img, ImageDescriptor id) throws IOException {
-            printToClient("IMAGE " + id.getFilename() + id.getExtension());
-            if (in.nextLine().compareTo("IMG_ACK") == 0) {
-                logger.log("Client " + info.name + ":" + info.clientID + ": Acknowledged Image Xfer. Sending...");
-                ImageIO.write(img, id.getExtension(), new BufferedOutputStream(socket.getOutputStream()));
-            }
-            if (in.nextLine().compareTo("IMG_OK") == 0) {
-                logger.log("Client " + info.name + ":" + info.clientID + ": Accepted Image Successfully");
-            }
+        public synchronized void queueImageXfer(BufferedImage img, ImageDescriptor id) throws IOException {
+            send_img = img;
+            send_img_id = id;
+            printToClient("IMAGE");
+            printToClient(id.getFilename() + "." + id.getExtension());
         }
     }
 }
@@ -423,7 +443,7 @@ class ServerLogger extends Thread {
     }
 
     public String getSimpleTime() {
-        return new SimpleDateFormat("HH-mm-ss").format(date);
+        return new SimpleDateFormat("K-mm-ss-a").format(date);
     }
 
     public void setActive(boolean serverActive) {

@@ -14,15 +14,10 @@ public class Client {
     //TODO Change to array to support multiple connections, and allow for switching connection by command
     private ConnectionThread connectionThread;
     private int activeConnection;
+    String name;
 
-    public static void main(String[] args) {
-        Client client = new Client();
-        Scanner s = new Scanner(System.in);
-        client.setActiveConnection(client.addConnection(new InetSocketAddress("localhost", 4444),
-                new InetSocketAddress("localhost", 4445)));
-        while (true) {
-            client.processCommand(s.nextLine());
-        }
+    Client() {
+        name = null;
     }
 
     public ConnectionThread getActiveConnection() {
@@ -34,8 +29,17 @@ public class Client {
         this.activeConnection = activeConnection;
     }
 
-    Client() {
-        //socket = new Socket();
+    public static void main(String[] args) {
+        Client client = new Client();
+        Scanner s = new Scanner(System.in);
+        client.setActiveConnection(client.addConnection(new InetSocketAddress("localhost", 4444)));
+        while (true) {
+            if (client.name == null) {
+                client.name = s.nextLine();
+                client.processCommand(client.name);
+            }
+            client.processCommand(s.nextLine());
+        }
     }
 
     private synchronized void printToClient(String output) {
@@ -43,8 +47,8 @@ public class Client {
     }
 
     //TODO edit this to add an additional connection rather than change the original
-    public int addConnection(@NotNull InetSocketAddress textSocket, @NotNull InetSocketAddress dataSocket) {
-        connectionThread = new ConnectionThread(textSocket, dataSocket);
+    public int addConnection(@NotNull InetSocketAddress textSocket) {
+        connectionThread = new ConnectionThread(textSocket);
         connectionThread.start();
         //will update to return a connection id once updated to support multiple connections
         return 0;
@@ -52,6 +56,7 @@ public class Client {
 
     private void processCommand(String command) {
         //check if first part of the command is a valid command
+        if (command.compareTo("") == 0) return;
         String[] cmd = command.toUpperCase().split(" ");
         switch (cmd[0]) {
             case "TEXT":
@@ -82,7 +87,7 @@ public class Client {
         private Path file_recv_path;
         private BufferedImage recv_img;
 
-        ConnectionThread(InetSocketAddress saddr, InetSocketAddress daddr) {
+        ConnectionThread(InetSocketAddress saddr) {
             this.saddr = saddr;
         }
 
@@ -105,10 +110,10 @@ public class Client {
         }
 
         private String createImageFilename(ImageDescriptor id) {
-            return "image/" + id.getFilename() + "." + id.getExtension();
+            return id.getFilename() + "_" + name + "." + id.getExtension();
         }
 
-        private void processImage() {
+        private synchronized void processImage() {
             try {
                 recv_img = ImageIO.read(ImageIO.createImageInputStream(iStream));
 
@@ -146,7 +151,8 @@ public class Client {
             }
             try {
                 ImageIO.write(recv_img, imgID.getExtension(), Files.newOutputStream(file_recv_path, StandardOpenOption.WRITE));
-                printToClient("IMG_OK");
+                sendToServer("IMG_OK");
+                printToClient("Saved image as: " + file_recv_path.toString());
             } catch (IOException e) {
                 e.printStackTrace();
                 printToClient("An error occurred in receiving image: " + file_recv_name);
@@ -155,7 +161,7 @@ public class Client {
 
         private void sendImage() throws IOException {
             BufferedImage image = ImageIO.read(ImageIO.createImageInputStream(Files.newInputStream(file_send_path)));
-            ImageIO.write(image, "png", ImageIO.createImageOutputStream(sock.getOutputStream()));
+            ImageIO.write(image, "png", ImageIO.createImageOutputStream(oStream));
         }
 
         private String processResponse(String res) {
@@ -177,8 +183,11 @@ public class Client {
                     return "File transferred successfully";
                 case "IMAGE":
                     file_recv_name = in.nextLine();
-                    processImage();
                     sendToServer("IMG_ACK");
+                    return "Receiving image from server...";
+                case "IMG_SEND":
+                    processImage();
+                    return "File received successfully";
                 default:
             }
             return res;
