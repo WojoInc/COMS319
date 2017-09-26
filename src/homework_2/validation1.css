@@ -1,0 +1,12 @@
+body {
+    text-align: center;
+}
+
+select {
+    width: 100%;
+}
+
+#mainform {
+    display: inline-block;
+    text-align: right;
+}

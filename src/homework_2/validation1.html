@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Validation Form</title>
+    <link rel="stylesheet" href="validation1.css">
+    <script src="validation1.js"></script>
+</head>
+
+<body>
+<form id="mainform" onsubmit="validate()" method="post">
+    fiel
+    <table>
+        <tr>
+            <td>First Name:</td>
+            <td><input type="text" id="firstname" placeholder="ex. John"></td>
+        </tr>
+        <tr>
+            <td>Last Name:</td>
+            <td><input type="text" id="lastname" placeholder="ex. Doe" required></td>
+        </tr>
+        <tr>
+            <td>Gender:</td>
+            <td>
+                <select id="gender" required>
+                    <option value="">Please select...</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <td>State:</td>
+            <td>
+                <select id="state" required>
+                    <option value="">Please select...</option>
+                    <option value="california">California</option>
+                    <option value="florida">Florida</option>
+                    <option value="new-york">New York</option>
+                    <option value="texas">Texas</option>
+                    <option value="hawaii">Hawaii</option>
+                    <option value="washington">Washington</option>
+                    <option value="colorado">Colorado</option>
+                    <option value="virginia">Florida</option>
+                    <option value="iowa">Iowa</option>
+                    <option value="arizona">Arizona</option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>
+                <button type="submit">Continue</button>
+            </td>
+        </tr>
+    </table>
+</form>
+</body>
+</html>
