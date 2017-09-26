@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Contact Information</title>
+    <script src="validation2.js"></script>
+</head>
+
+<body>
+<form id="mainform" action="geolocation.html" onsubmit='return validate()'>
+    <table>
+        <tr>
+            <td>Email:</td>
+            <td><input type="text" id="email" placeholder="ex. fake@email.com" required></td>
+            <td id="status-email"></td>
+        </tr>
+        <tr>
+            <td>Phone:</td>
+            <td><input type="text" id="phone" placeholder="ex. ###-###-#### or ##########" required></td>
+            <td id="status-phone"></td>
+        </tr>
+        <tr>
+            <td>Address:</td>
+            <td><input type="text" id="address" placeholder="ex. City, State" required></td>
+            <td id="status-address"></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>
+                <button type="submit" value="Submit">Submit</button>
+            </td>
+        </tr>
+    </table>
+</form>
+
+</body>
+</html>

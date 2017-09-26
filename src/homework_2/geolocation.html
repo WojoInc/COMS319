@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        #map {
+            height: 400px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+    function initMap() {
+
+        var geocoder = new google.maps.Geocoder();
+        var map = new google.maps.Map(document.getElementById('map'), {
+            zoom: 4
+        });
+        var marker;
+        var address = localStorage.getItem("address");
+        geocoder.geocode({'address': address}, function (results, status) {
+            if (status == 'OK') {
+                map.setCenter(results[0].geometry.location);
+                marker = new google.maps.Marker({
+                    map: map,
+                    position: results[0].geometry.location
+                });
+                map.panTo(marker.position);
+                map.zoomTo(4);
+            } else {
+                alert('Geocode was not successful for the following reason: ' + status);
+            }
+        });
+
+    }
+    function codeAddress() {
+        var address = localStorage.getItem("address");
+        geocoder.geocode({'address': address}, function (results, status) {
+            if (status == 'OK') {
+                map.setCenter(results[0].geometry.location);
+                var marker = new google.maps.Marker({
+                    map: map,
+                    position: results[0].geometry.location
+                });
+            } else {
+                alert('Geocode was not successful for the following reason: ' + status);
+            }
+        });
+    }
+</script>
+<script async defer
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDOLRxnqAkA1MAkaIrKymQraik1SYkjk-Y&callback=initMap">
+</script>
+</body>
+</html>

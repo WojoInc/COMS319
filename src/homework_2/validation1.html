@@ -8,16 +8,17 @@
 </head>
 
 <body>
-<form id="mainform" onsubmit="validate()" method="post">
-    fiel
+<form id="mainform" action="validation2.html" onsubmit='return validate()'>
     <table>
         <tr>
             <td>First Name:</td>
-            <td><input type="text" id="firstname" placeholder="ex. John"></td>
+            <td><input type="text" id="firstname" placeholder="ex. John" required></td>
+            <td id="status-first"></td>
         </tr>
         <tr>
             <td>Last Name:</td>
             <td><input type="text" id="lastname" placeholder="ex. Doe" required></td>
+            <td id="status-last"></td>
         </tr>
         <tr>
             <td>Gender:</td>
@@ -28,6 +29,7 @@
                     <option value="female">Female</option>
                 </select>
             </td>
+            <td id="status-gender"></td>
         </tr>
         <tr>
             <td>State:</td>
@@ -46,14 +48,16 @@
                     <option value="arizona">Arizona</option>
                 </select>
             </td>
+            <td id="status-state"></td>
         </tr>
         <tr>
             <td></td>
             <td>
-                <button type="submit">Continue</button>
+                <button type="submit" value="Submit">Continue</button>
             </td>
         </tr>
     </table>
 </form>
+
 </body>
 </html>
