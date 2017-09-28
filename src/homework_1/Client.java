@@ -1,30 +1,23 @@
 package homework_1;
 
+import com.sun.istack.internal.NotNull;
+
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.BufferedInputStream;
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.util.Scanner;
 
 public class Client {
-    private Socket socket;
     //TODO Change to array to support multiple connections, and allow for switching connection by command
     private ConnectionThread connectionThread;
     private int activeConnection;
+    String name;
 
-    public static void main(String[] args) {
-        Client client = new Client();
-        Scanner s = new Scanner(System.in);
-        client.setActiveConnection(client.addConnection("localhost", 4444));
-        while (true) {
-            client.processCommand(s.nextLine());
-        }
+    Client() {
+        name = null;
     }
 
     public ConnectionThread getActiveConnection() {
@@ -36,8 +29,17 @@ public class Client {
         this.activeConnection = activeConnection;
     }
 
-    Client() {
-        //socket = new Socket();
+    public static void main(String[] args) {
+        Client client = new Client();
+        Scanner s = new Scanner(System.in);
+        client.setActiveConnection(client.addConnection(new InetSocketAddress("localhost", 4444)));
+        while (true) {
+            if (client.name == null) {
+                client.name = s.nextLine();
+                client.processCommand(client.name);
+            }
+            client.processCommand(s.nextLine());
+        }
     }
 
     private synchronized void printToClient(String output) {
@@ -45,8 +47,8 @@ public class Client {
     }
 
     //TODO edit this to add an additional connection rather than change the original
-    public int addConnection(String rhost, int rport) {
-        connectionThread = new ConnectionThread(new InetSocketAddress(rhost, rport));
+    public int addConnection(@NotNull InetSocketAddress textSocket) {
+        connectionThread = new ConnectionThread(textSocket);
         connectionThread.start();
         //will update to return a connection id once updated to support multiple connections
         return 0;
@@ -54,6 +56,7 @@ public class Client {
 
     private void processCommand(String command) {
         //check if first part of the command is a valid command
+        if (command.compareTo("") == 0) return;
         String[] cmd = command.toUpperCase().split(" ");
         switch (cmd[0]) {
             case "TEXT":
@@ -74,12 +77,15 @@ public class Client {
     class ConnectionThread extends Thread {
 
         private InetSocketAddress saddr;
+        private InputStream iStream;
+        private OutputStream oStream;
         private Scanner in;
         private PrintWriter out;
-        private PrintWriter dataOut;
         private Socket sock;
-        private Socket dataSock;
         private Path file_send_path;
+        private String file_recv_name;
+        private Path file_recv_path;
+        private BufferedImage recv_img;
 
         ConnectionThread(InetSocketAddress saddr) {
             this.saddr = saddr;
@@ -97,37 +103,76 @@ public class Client {
         private String getFile_send_name() {
             return file_send_path.getName(file_send_path.getNameCount() - 1).toString();
         }
-        private Socket connect() throws IOException {
-            socket = new Socket();
-            socket.connect(this.saddr);
-            return socket;
+
+        private void connect() throws IOException {
+            sock = new Socket();
+            sock.connect(this.saddr);
+        }
+
+        private String createImageFilename(ImageDescriptor id) {
+            return id.getFilename() + "_" + name + "." + id.getExtension();
+        }
+
+        private synchronized void processImage() {
+            try {
+                recv_img = ImageIO.read(ImageIO.createImageInputStream(iStream));
+
+            } catch (IOException e) {
+                e.printStackTrace();
+                printToClient("An error occurred in transferring image: " + file_recv_name);
+
+            }
+            ImageDescriptor imgID;
+            try {
+                imgID = new ImageDescriptor(file_recv_name);
+            } catch (ArrayIndexOutOfBoundsException ex) {
+                printToClient("An error occurred in receiving image: No file extension found. Cannot determine file type!");
+                return;
+            }
+
+            try {
+                Files.createDirectory(Paths.get("image"));
+            } catch (FileAlreadyExistsException ex) {
+                //Ignore, as we are creating directory only if not existing
+            } catch (IOException e) {
+                e.printStackTrace();
+                printToClient("An error occurred in receiving image: " + file_recv_name);
+                return;
+            }
+            try {
+                file_recv_path = Paths.get(createImageFilename(imgID));
+                Files.createFile(file_recv_path);
+            } catch (FileAlreadyExistsException ex) {
+                printToClient("Cannot save image: File already exists! " + file_recv_name);
+                return;
+            } catch (IOException e) {
+                e.printStackTrace();
+                return;
+            }
+            try {
+                ImageIO.write(recv_img, imgID.getExtension(), Files.newOutputStream(file_recv_path, StandardOpenOption.WRITE));
+                sendToServer("IMG_OK");
+                printToClient("Saved image as: " + file_recv_path.toString());
+            } catch (IOException e) {
+                e.printStackTrace();
+                printToClient("An error occurred in receiving image: " + file_recv_name);
+            }
         }
 
         private void sendImage() throws IOException {
             BufferedImage image = ImageIO.read(ImageIO.createImageInputStream(Files.newInputStream(file_send_path)));
-            ImageIO.write(image, "png", ImageIO.createImageOutputStream(dataSock.getOutputStream()));
+            ImageIO.write(image, "png", ImageIO.createImageOutputStream(oStream));
+            oStream.flush();
         }
 
-        private String processResponse(String res) {
+        private synchronized String processResponse(String res) {
             //check if first part of the command is a valid command
             String[] cmd = res.toUpperCase().split(" ");
             switch (cmd[0]) {
                 case "IMG_ACK":
                     try {
-                        dataSock = new Socket();
-                        dataSock.connect(saddr);
-                        dataOut = new PrintWriter(dataSock.getOutputStream());
-                        //print clientid back to server so it will add second socket to existing connection
-                        dataOut.println(cmd[1]);
-                        dataOut.flush();
-
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        return "An error occurred while trying to send file!";
-                    }
-                    break;
-                case "IMG_RDY":
-                    try {
+                        printToClient("Server acknowledged request for image xfer. Sending image...");
+                        res = "";
                         sendToServer("IMG_SEND");
                         sendImage();
                     } catch (IOException e) {
@@ -136,7 +181,16 @@ public class Client {
                     }
                     break;
                 case "IMG_OK":
-                    return "File transferred successfully";
+                    return "File transferred successfully" + System.getProperty("line.separator");
+                case "IMAGE":
+                    file_recv_name = in.nextLine();
+                    sendToServer("IMG_ACK");
+                    res = "";
+                    return "Receiving image from server...";
+                case "IMG_SEND":
+                    processImage();
+                    res = "";
+                    return "File received successfully";
                 default:
             }
             return res;
@@ -145,19 +199,21 @@ public class Client {
         @Override
         public void run() {
             try {
-                sock = connect();
-                in = new Scanner(new BufferedInputStream(sock.getInputStream()));
-                out = new PrintWriter(sock.getOutputStream());
-                out.println(-1);
-                out.flush();
+                connect();
+                printToClient("type image <filename> to send image or text <message> to send message. Ctrl+C to quit.");
+                iStream = new BufferedInputStream(sock.getInputStream());
+                oStream = new BufferedOutputStream(sock.getOutputStream());
+                in = new Scanner(iStream);
+                out = new PrintWriter(oStream);
                 while (in.hasNextLine()) {
+                    //processes response to check for any valid server commands before sending server response to client
                     printToClient(processResponse(in.nextLine()));
 
                 }
 
             } catch (IOException ex) {
-                printToClient("Could not connect to server at: " + this.saddr.getHostName() + ":" +
-                        this.saddr.getPort());
+                //TODO make this more informative
+                printToClient("Could not connect to server!");
             }
         }
 
