@@ -162,9 +162,10 @@ public class Client {
         private void sendImage() throws IOException {
             BufferedImage image = ImageIO.read(ImageIO.createImageInputStream(Files.newInputStream(file_send_path)));
             ImageIO.write(image, "png", ImageIO.createImageOutputStream(oStream));
+            oStream.flush();
         }
 
-        private String processResponse(String res) {
+        private synchronized String processResponse(String res) {
             //check if first part of the command is a valid command
             String[] cmd = res.toUpperCase().split(" ");
             switch (cmd[0]) {
@@ -180,13 +181,15 @@ public class Client {
                     }
                     break;
                 case "IMG_OK":
-                    return "File transferred successfully";
+                    return "File transferred successfully" + System.getProperty("line.separator");
                 case "IMAGE":
                     file_recv_name = in.nextLine();
                     sendToServer("IMG_ACK");
+                    res = "";
                     return "Receiving image from server...";
                 case "IMG_SEND":
                     processImage();
+                    res = "";
                     return "File received successfully";
                 default:
             }
@@ -197,6 +200,7 @@ public class Client {
         public void run() {
             try {
                 connect();
+                printToClient("type image <filename> to send image or text <message> to send message. Ctrl+C to quit.");
                 iStream = new BufferedInputStream(sock.getInputStream());
                 oStream = new BufferedOutputStream(sock.getOutputStream());
                 in = new Scanner(iStream);

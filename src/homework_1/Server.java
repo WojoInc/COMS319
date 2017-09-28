@@ -318,14 +318,17 @@ public class Server {
                     break;
                 case "IMG_SEND":
                     if (dataXferRequested) processImage();
+                    break;
                 case "IMG_ACK":
                     imageToClient();
+                    break;
                 case "IMG_OK":
                     try {
                         logger.log("Client " + info.name + ":" + info.clientID + ": Accepted Image Successfully");
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
+                    break;
                 default:
             }
         }
@@ -344,7 +347,7 @@ public class Server {
             return "image/" + id.getFilename() + "_" + info.name + "_" + getServerTime() + "." + id.getExtension();
         }
 
-        private void processImage() {
+        private synchronized void processImage() {
             try {
                 recv_img = ImageIO.read(ImageIO.createImageInputStream(iStream));
 
@@ -394,6 +397,7 @@ public class Server {
             } catch (IOException e) {
                 e.printStackTrace();
             }
+
 
             broadcast(recv_img, file_recv_path.toString().substring(6), info);
         }
