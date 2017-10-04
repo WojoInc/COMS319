@@ -1,0 +1,18 @@
+<html>
+<head>
+    <script src="image_proc.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+</head>
+<label for="message">Message</label>
+<input type="text" id="message" placeholder="Type message here">
+<button type="button" onclick="return encode()" id="btn-encode">Encode</button>
+<canvas id="img-src"></canvas>
+
+<script>
+    $('#message').keyup(function (event) {
+        if (event.which === 13) {
+            getMessage(); //change to encode later
+        }
+    });
+</script>
+</html>
