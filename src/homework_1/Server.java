@@ -126,12 +126,37 @@ public class Server {
             printToServerAdminUI("Could not write to chatlog!");
         }
         for (ClientThread c : clients) {
-            if (clientInfo.clientID != c.id) {
+            if (clientInfo.clientID != c.info.clientID) {
                 c.printToClient(clientInfo.name + ":" + message);
             } else {
                 printToServerAdminUI("Skipped broadcast to sending client id: " + clientInfo.clientID + "\n");
                 try {
                     logger.log("Skipped message broadcast to sending client id: " + clientInfo.clientID);
+                } catch (IOException ex) {
+                    printToServerAdminUI("Could not write to logfile!");
+                }
+
+            }
+        }
+    }
+
+    private synchronized void broadcast(BufferedImage img, String serverFileName, ClientInfo clientInfo) {
+        ImageDescriptor id = new ImageDescriptor(serverFileName);
+        for (ClientThread c : clients) {
+            if (clientInfo.clientID != c.info.clientID) {
+                try {
+                    c.queueImageXfer(img, id);
+                } catch (IOException ex) {
+                    try {
+                        logger.log("Could not send image to client id: " + c.info.clientID + "\n");
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            } else {
+                printToServerAdminUI("Skipped broadcast to sending client id: " + clientInfo.clientID + "\n");
+                try {
+                    logger.log("Skipped image broadcast to sending client id: " + clientInfo.clientID);
                 } catch (IOException ex) {
                     printToServerAdminUI("Could not write to logfile!");
                 }
@@ -196,26 +221,6 @@ public class Server {
         private Scanner id_reader;
 
         private synchronized int acceptClient(Socket client) {
-            //check if new connection is a secondary connection opened for client data xfer
-            try {
-                id_reader = new Scanner(client.getInputStream());
-                if (id_reader.hasNextInt()) {
-                    int clid = id_reader.nextInt();
-                    //make sure received int wont cause an IndexOutOfBoundsException
-                    if ((clid >= 0) && (clid < clients.size())) {
-                        if (clients.get(clid).dataXferRequested) {
-                            clients.get(clid).dataSocket = client;
-                            return clients.size() - 1;
-                        }
-                        client.close();
-                        return clients.size() - 1;
-                    }
-
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
             clients.add(new ClientThread(client, clients.size()));
             clients.peekLast().start();
             return clients.size() - 1;
@@ -253,12 +258,14 @@ public class Server {
 
         private Socket socket;
         private Socket dataSocket;
-        private InputStream dataInput;
+        private InputStream iStream;
+        private OutputStream oStream;
         private String file_recv_name;
         private Path file_recv_path;
         private BufferedImage recv_img;
+        private BufferedImage send_img;
+        private ImageDescriptor send_img_id;
         private boolean dataXferRequested;
-        private boolean data_isReceiving;
         private ClientInfo info;
         private int id;
         private Scanner in;
@@ -277,8 +284,10 @@ public class Server {
         public void run() {
             printConnectionInfo();
             try {
-                in = new Scanner(new BufferedInputStream(socket.getInputStream()));
-                out = new PrintWriter(socket.getOutputStream());
+                iStream = new BufferedInputStream(socket.getInputStream());
+                oStream = new BufferedOutputStream(socket.getOutputStream());
+                in = new Scanner(iStream);
+                out = new PrintWriter(oStream);
                 printWelcomeMessage();
                 namePrompt();
                 name = in.nextLine();
@@ -287,10 +296,6 @@ public class Server {
                 info = new ClientInfo(name, id, socket.getRemoteSocketAddress() + ":" + socket.getPort());
 
                 while (socket.isConnected()) {
-                    if (dataSocket != null && dataSocket.isConnected() && !data_isReceiving) {
-                        printToClient("IMG_RDY");
-                        data_isReceiving = true;
-                    }
                     if (in.hasNextLine()) processClientCommand(in.nextLine());
 
                 }
@@ -309,33 +314,57 @@ public class Server {
                 case "IMAGE":
                     dataXferRequested = true;
                     file_recv_name = in.nextLine();
-                    printToClient("IMG_ACK " + info.clientID);
+                    printToClient("IMG_ACK");
                     break;
                 case "IMG_SEND":
                     if (dataXferRequested) processImage();
+                    break;
+                case "IMG_ACK":
+                    imageToClient();
+                    break;
+                case "IMG_OK":
+                    try {
+                        logger.log("Client " + info.name + ":" + info.clientID + ": Accepted Image Successfully");
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    break;
                 default:
             }
         }
 
-        private void cleanupDataConnection() {
+        private synchronized void imageToClient() {
             try {
-                dataSocket.close();
-                dataXferRequested = false;
-            } catch (IOException e) {
-                e.printStackTrace();
+                logger.log("Client " + info.name + ":" + info.clientID + ": Acknowledged Image Xfer. Sending...");
+                printToClient("IMG_SEND");
+                ImageIO.write(send_img, send_img_id.getExtension(), oStream);
+            } catch (IOException ex) {
+                ex.printStackTrace();
             }
         }
 
-        private void processImage() {
+        private String createImageFilename(ImageDescriptor id) {
+            return "image/" + id.getFilename() + "_" + info.name + "_" + getServerTime() + "." + id.getExtension();
+        }
+
+        private synchronized void processImage() {
             try {
-                recv_img = ImageIO.read(ImageIO.createImageInputStream(dataSocket.getInputStream()));
+                recv_img = ImageIO.read(ImageIO.createImageInputStream(iStream));
 
             } catch (IOException e) {
                 e.printStackTrace();
                 printToClient("An error occurred in transferring image: " + file_recv_name);
-                cleanupDataConnection();
+
             }
+
             broadcast("Received file from " + info.name + ": " + file_recv_name);
+            ImageDescriptor imgID;
+            try {
+                imgID = new ImageDescriptor(file_recv_name);
+            } catch (ArrayIndexOutOfBoundsException ex) {
+                printToClient("An error occurred in transferring image: No file extension found. Cannot determine file type!");
+                return;
+            }
 
             try {
                 Files.createDirectory(Paths.get("image"));
@@ -344,25 +373,33 @@ public class Server {
             } catch (IOException e) {
                 e.printStackTrace();
                 printToClient("An error occurred in transferring image: " + file_recv_name);
-                cleanupDataConnection();
+                return;
             }
             try {
-                file_recv_path = Paths.get("image/" + info.name + "_" + file_recv_name + "_" + getServerTime());
+                file_recv_path = Paths.get(createImageFilename(imgID));
                 Files.createFile(file_recv_path);
             } catch (FileAlreadyExistsException ex) {
                 printToClient("Cannot upload: File already exists! " + file_recv_name);
-                cleanupDataConnection();
+                return;
             } catch (IOException e) {
                 e.printStackTrace();
+                return;
             }
             try {
-                ImageIO.write(recv_img, "png", Files.newOutputStream(file_recv_path, StandardOpenOption.WRITE));
+                ImageIO.write(recv_img, imgID.getExtension(), Files.newOutputStream(file_recv_path, StandardOpenOption.WRITE));
                 printToClient("IMG_OK");
             } catch (IOException e) {
                 e.printStackTrace();
                 printToClient("An error occurred in transferring image: " + file_recv_name);
             }
-            cleanupDataConnection();
+            try {
+                logger.logChat(file_recv_path.toString(), info);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+
+            broadcast(recv_img, file_recv_path.toString().substring(6), info);
         }
 
         private void namePrompt() {
@@ -382,6 +419,13 @@ public class Server {
         public synchronized void printToClient(String message) {
             out.println(message);
             out.flush();
+        }
+
+        public synchronized void queueImageXfer(BufferedImage img, ImageDescriptor id) throws IOException {
+            send_img = img;
+            send_img_id = id;
+            printToClient("IMAGE");
+            printToClient(id.getFilename() + "." + id.getExtension());
         }
     }
 }
@@ -403,7 +447,7 @@ class ServerLogger extends Thread {
     }
 
     public String getSimpleTime() {
-        return new SimpleDateFormat("HHmmss").format(date);
+        return new SimpleDateFormat("K-mm-ss-a").format(date);
     }
 
     public void setActive(boolean serverActive) {
