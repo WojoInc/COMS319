@@ -1,15 +1,16 @@
-// CALCULATOR.JS
-//   Note: Look at 03_Sample program first
-//
-//
-
-// 
+/**
+ * Created by PhpStorm.
+ * User: wojoinc@iastate.edu
+ * Date: 10/1/17
+ * Time: 1:17 PM
+ */
 class Calculator {
 
     constructor(elementId) {
 
         this.leftOp = 0;
         this.lastOp = '';
+        this.memory = 0;
 
         this.View = {
             textRow: {id: "textRow", type: "text", value: "", onclick: ""},
@@ -44,8 +45,7 @@ class Calculator {
                 if (target.id == "button-equal") {
                     this.buttonHandlerEqual(Calculator.getCurrentEntry());
                 } else if (target.id == "button-clr") {
-                    this.leftOp = 0;
-                    document.getElementById('textRow').value = '';
+                    this.buttonHandlerClr();
                 } else if (target.id == "button-plus") {
                     this.buttonHandlerPlus();
                 } else if (target.id == "button-sub") {
@@ -56,13 +56,23 @@ class Calculator {
                     this.buttonHandlerDiv();
                 } else if (target.id == "button-dot") {
                     this.buttonHandler(target.value);
+                } else if (target.id == "button-mrec") {
+                    this.buttonHandlerMemRec();
+                } else if (target.id == "button-msub") {
+                    this.buttonHandlerMemSub();
+                } else if (target.id == "button-madd") {
+                    this.buttonHandlerMemAdd();
+                } else if (target.id == "button-mclr") {
+                    this.buttonHandlerMemClr();
                 }
                 else {
                     this.buttonHandler(target.value);
                 }
+                this.colorizeButtons(target.id);
             }
         };
 
+        this.clearOps = ['=', 'M+', 'M-', 'MR', 'MC'];
         this.attachButtonHandlers();
         let htmlString = this.createHTMLforView();
         console.log(htmlString);
@@ -71,10 +81,17 @@ class Calculator {
 
     } // end of constructor
 
+    colorizeButtons(elementID) {
+        let buttons = this.View.container.getElementsByTagName('input');
+        for (let i = 0; i < buttons.length; i++) {
+            buttons[i].style.color = 'black';
+        }
+        document.getElementById(elementID).style.color = 'red';
+    }
+
     static getCurrentEntry() {
         return parseFloat(document.getElementById('textRow').value);
     }
-
 
     //
     // attachButtonHandlers
@@ -87,15 +104,21 @@ class Calculator {
             = this.Controller.viewClickHandler.bind(this);
     }
 
+    buttonHandlerClr() {
+        this.leftOp = 0;
+        document.getElementById('textRow').value = '';
+        this.lastOp = 'C';
+    }
+
     buttonHandler(value) {
-        if (this.lastOp == '=') {
+        if (this.clearOps.includes(this.lastOp)) {
             document.getElementById('textRow').value = '';
             this.lastOp = value;
         }
         document.getElementById('textRow').value = document.getElementById('textRow').value + value;
     }
 
-    buttonHandlerEqual() {
+    buttonHandlerEqual(value) {
         switch (this.lastOp) {
             case '+':
                 this.buttonHandlerPlus();
@@ -113,6 +136,26 @@ class Calculator {
         document.getElementById('textRow').value = this.leftOp;
         this.leftOp = 0;
         this.lastOp = '=';
+    }
+
+    buttonHandlerMemClr() {
+        this.memory = 0;
+        this.lastOp = 'MC';
+    }
+
+    buttonHandlerMemAdd() {
+        this.memory += Calculator.getCurrentEntry();
+        this.lastOp = 'M+';
+    }
+
+    buttonHandlerMemSub() {
+        this.memory -= Calculator.getCurrentEntry();
+        this.lastOp = 'M-'
+    }
+
+    buttonHandlerMemRec() {
+        document.getElementById('textRow').value = this.memory;
+        this.lastOp = 'MR';
     }
 
     buttonHandlerMinus() {
