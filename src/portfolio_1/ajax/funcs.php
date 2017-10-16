@@ -17,9 +17,11 @@ function strToBin($string)
     return $out;
 }
 
-function toStringBin($bin)
+function charArrtoStr($bin)
 {
-    return pack('H*', base_convert($bin, 2, 16));
+    $result = "";
+    foreach ($bin as $item) $result .= pack('C*', $item);
+    return $result;
 }
 
 function bitAt($char, $n)
@@ -27,9 +29,9 @@ function bitAt($char, $n)
     return ($char >> $n) & 1;
 }
 
-function setBitAt($char, $loc, $bit)
+function setBitAt(&$char, $loc, $bit)
 {
-    return $char | ($bit << $loc);
+    $char |= ($bit << $loc);
 }
 
 function strToByteArr($str)

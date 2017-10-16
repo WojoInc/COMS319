@@ -7,9 +7,14 @@
     <script src="helper.js"></script>
 </head>
 <body>
-<div>
-    Upload an Image <input type="file" id="image-input">
-</div>
+<form id="uploadimage" action="" method="post" enctype="multipart/form-data">
+    <div id="image_preview"><img id="previewing" src=""/></div>
+    <div id="selectImage">
+        <label>Select Your Image</label><br/>
+        <input type="file" name="file" id="file" required/>
+        <input type="submit" value="Upload"/>
+    </div>
+</form>
 <table>
     <tr>
         <img id="img-source" style="width:400px; height: 400px; border: dashed; border-color: black;" src=""></img>
