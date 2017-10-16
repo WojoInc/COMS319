@@ -1,18 +1,26 @@
 <html>
 <head>
-    <script src="calculator.js">
-    </script>
+    <script src="calculator.js"></script>
+    <script src="calculatorBinary.js"></script>
 </head>
 <body>
-<h1>A Calculator </h1>
-<div id="myCalc1"></div>
-<h1>Another Calculator </h1>
-<div id="myCalc2"></div>
-
-
+<table style="padding: 2%; border-spacing: 20px">
+    <tr>
+        <td><b>Calculator</b></td>
+        <td><b>Binary Calculator</b></td>
+    </tr>
+    <tr>
+        <td id="myCalc1"></td>
+        <td id="myCalc2"></td>
+    </tr>
+</table>
+<div><p>
+    Both calculators allow for clicking on multiple operators in succession. Did not add support for repeating last
+    operation with '=' however.
+</p></div>
 <script>
     new Calculator("myCalc1")
-    new Calculator("myCalc2")
+    new BinaryCalculator("myCalc2")
 </script>
 </body>
 </html>
