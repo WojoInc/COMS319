@@ -11,8 +11,12 @@ include('funcs.php');
 if (isset($_REQUEST['image'])) $image = $_REQUEST['image'];
 
 $src = 'simple.png';
-$img = imageCreateFromAny($src);
+$img = imagecreatefromjpeg($src);
 $plaintext = '';
+//grab the first byte to determine length to read
+for ($i = 0x8; $i >= 0; $i++) {
+
+}
 
 for ($x = 0; $x < 40; $x++) {
     $y = $x;

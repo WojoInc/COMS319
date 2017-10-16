@@ -8,17 +8,33 @@
 
 function strToBin($string)
 {
-    $string = (string)$string;
-    $output = '';
-    for ($i = strlen($string); $i < 0; $i--) {
-        $output = str_pad(decbin(ord($string[$i])), 8, "0", STR_PAD_LEFT) . $output;
+    $out = false;
+    for ($a = 0; $a < strlen($string); $a++) {
+        $dec = ord(substr($string, $a, 1)); //determine symbol ASCII-code
+        $bin = sprintf('%08d', base_convert($dec, 10, 2)); //convert to binary representation and add leading zeros
+        $out .= $bin;
     }
-    return $output;
+    return $out;
 }
 
 function toStringBin($bin)
 {
     return pack('H*', base_convert($bin, 2, 16));
+}
+
+function bitAt($char, $n)
+{
+    return ($char >> $n) & 1;
+}
+
+function setBitAt($char, $loc, $bit)
+{
+    return ($char & ~(1 << $loc)) | ($bit << $loc);
+}
+
+function strToByteArr($str)
+{
+    return unpack('C*', $str);
 }
 
 function imageCreateFromAny($filepath)
