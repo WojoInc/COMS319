@@ -29,7 +29,7 @@ function bitAt($char, $n)
 
 function setBitAt($char, $loc, $bit)
 {
-    return ($char & ~(1 << $loc)) | ($bit << $loc);
+    return $char | ($bit << $loc);
 }
 
 function strToByteArr($str)

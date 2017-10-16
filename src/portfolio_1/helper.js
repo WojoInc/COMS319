@@ -26,10 +26,10 @@ function encode() {
 function decode() {
     alert("Decoding");
     $.ajax({
-        url: 'ajax/encrypt.php',
+        url: 'ajax/decrypt.php',
         type: 'POST',
         data: {
-            image: '000.jpg'
+            image: 'simple.jpg'
         },
         success: function (data) {
             alert(data);

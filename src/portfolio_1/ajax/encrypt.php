@@ -20,15 +20,22 @@ if (isset($image) && isset($message)) {
     list($img_h, $img_w, $attr, $info) = getimagesize($src);
     $x = $y = 0;
     //encode message length into the first 8 bits
-    for ($i = 0x8; $i >= 0; $i--) {
+    for ($i = 0x7; $i >= 0; $i--) {
         $index = imagecolorat($img, $x, $y);
         $colors = imagecolorsforindex($img, $index);
-        echo "$i => " . bitAt($len, $i) . "\n";
+        echo "$i => " . bitAt($len, $i);
         setBitAt($colors['blue'], 0, bitAt($len, $i));
         //$colors['blue'] += bitAt($len,$i);
         $new_color = imagecolorallocate($img, $colors['red'], $colors['green'], $colors['blue']);
+        echo bitAt($colors['blue'], 0) . "\n";
         imagesetpixel($img, $x, $y, $new_color);
-        if ($x + 1 > $img_w) $x = 0;
+        if ($x + 1 > $img_w) {
+            $x = 0;
+            $y++;
+        } else {
+            $x++;
+        }
+
     }
     foreach ($bin_message as $char) {
 
@@ -44,7 +51,12 @@ if (isset($image) && isset($message)) {
             //echo $colors['blue'] . "\n";
             $new_color = imagecolorallocate($img, $colors['red'], $colors['green'], $colors['blue']);
             imagesetpixel($img, $x, $y, $new_color);
-            if ($x + 1 > $img_w) $x = 0;
+            if ($x + 1 > $img_w) {
+                $x = 0;
+                $y++;
+            } else {
+                $x++;
+            }
         }
     }
     if (imagejpeg($img, '../images/simple.jpg', 100)) {

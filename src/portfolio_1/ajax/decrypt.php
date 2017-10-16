@@ -10,13 +10,28 @@ include('funcs.php');
 
 if (isset($_REQUEST['image'])) $image = $_REQUEST['image'];
 
-$src = 'simple.png';
+$image = 'simple.jpg';
+$src = '../images/' . $image;
 $img = imagecreatefromjpeg($src);
+if ($img == null) echo 'Could not load image';
+list($img_h, $img_w, $attr, $info) = getimagesize($src);
 $plaintext = '';
 //grab the first byte to determine length to read
-for ($i = 0x8; $i >= 0; $i++) {
-
+$msg_len = 0;
+$x = $y = 0;
+for ($i = 0x7; $i >= 0; $i--) {
+    $index = imagecolorat($img, $x, $y);
+    $colors = imagecolorsforindex($img, $index);
+    echo "$i => " . bitAt($colors['blue'], 0) . "\n";
+    setBitAt($msg_len, $i, bitAt($colors['blue'], 0));
+    if ($x + 1 > $img_w) {
+        $x = 0;
+        $y++;
+    } else {
+        $x++;
+    }
 }
+echo "\nMessage length: " . $msg_len;
 
 for ($x = 0; $x < 40; $x++) {
     $y = $x;
@@ -30,5 +45,5 @@ for ($x = 0; $x < 40; $x++) {
 }
 
 $plaintext = toStringBin($plaintext);
-echo $plaintext;
+//echo $plaintext;
 die;
