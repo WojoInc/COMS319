@@ -7,6 +7,7 @@ $(document).ready(function () {
     });
 
     $("#uploadimage").on('submit', (function (e) {
+        e.preventDefault();
         $.ajax({
             url: "ajax/upload.php",
             type: "POST",
@@ -15,9 +16,8 @@ $(document).ready(function () {
             cache: false,
             processData: false,
             success: function (data) {
-                alert(data);
-                $('#loading').hide();
-                $("#message").html(data);
+                $('#img-source').attr('src', data);
+                return false;
             }
         });
     }));
@@ -30,10 +30,11 @@ function encode() {
         type: 'POST',
         data: {
             message: $('#textarea-plaintext').val(),
-            image: 'witcherfiend.png'
+            image: $('#file').val()
         },
         success: function (data) {
-            alert(data);
+            $('#img-encoded').attr('src', data);
+            localStorage.setItem('encoded-image-path', data);
         }
     })
 
@@ -45,7 +46,7 @@ function decode() {
         url: 'ajax/decrypt.php',
         type: 'POST',
         data: {
-            image: 'simple.png'
+            image: $('#file').val()
         },
         success: function (data) {
             alert(data);

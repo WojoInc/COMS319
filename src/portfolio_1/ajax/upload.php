@@ -21,6 +21,7 @@ if (isset($_FILES["file"]["type"])) {
                 $sourcePath = $_FILES['file']['tmp_name'];
                 $targetPath = "../images/" . $_FILES['file']['name'];
                 move_uploaded_file($sourcePath, $targetPath);
+                echo 'images/' . $_FILES['file']['name'];
             }
         }
     }

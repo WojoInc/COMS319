@@ -12,7 +12,8 @@ if (isset($_REQUEST['message'])) $message = $_REQUEST['message'];
 
 if (isset($image) && isset($message)) {
 
-
+    $image = end(explode("\\", $image));
+    //echo "parsed path: " . $image;
     $bin_message = strToByteArr($message);
     $len = sizeof($bin_message);
     //echo $len . "\n";
@@ -77,8 +78,8 @@ if (isset($image) && isset($message)) {
             }
         }
     }
-    if (imagepng($img, '../images/simple.png', 0)) {
-        echo "Image created";
+    if (imagepng($img, '../images/encoded.png', 0)) {
+        echo "images/encoded.png";
     }
     imagedestroy($img);
 }
