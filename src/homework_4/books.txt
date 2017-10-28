@@ -1,0 +1,1 @@
+[{"name":"Test","borrowedBy":"Utest","availability":0,"id":158},{"name":"Test2","borrowedBy":"Utest","availability":0,"id":159},{"name":"dogs","borrowedBy":"","availability":1,"id":409}]
