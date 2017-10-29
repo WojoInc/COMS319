@@ -1,3 +1,8 @@
+/**
+ * Created by PhpStorm.
+ * User: wojoinc
+ * Date: 10/28/2017
+ */
 $(document).ready(function () {
     $('#btn-login').click(function () {
         let $user = $('#username');

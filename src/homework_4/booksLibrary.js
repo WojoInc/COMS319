@@ -1,3 +1,8 @@
+/**
+ * Created by PhpStorm.
+ * User: wojoinc
+ * Date: 10/28/2017
+ */
 $(document).ready(function () {
     if (localStorage.getItem("username") == undefined) {
         alert("You need to login first!");
@@ -11,7 +16,7 @@ $(document).ready(function () {
 class Library {
     constructor(parentElement, user) {
         this.Container = $('#' + parentElement);
-        this.activeUser = user;
+        this.activeUser = new User(user);
         this.BKIDS = [];
         this.Books = this.getBooks();
         this.Shelves = {
@@ -20,11 +25,17 @@ class Library {
             sport: new Shelf("Sport", 2),
             lit: new Shelf("Literature", 3)
         };
-        alert(JSON.stringify(this.Books));
+        // alert(JSON.stringify(this.Books));
 
         this.Container.html(this.createHTML());
 
-        this.assignHandlers();
+        if (this.activeUser.name === 'admin') {
+            this.assignHandlersLibrarian();
+        }
+        else {
+            this.assignHandlersUndergrad();
+            this.activeUser.highlightBorrowed();
+        }
     }
 
     createHTML() {
@@ -38,7 +49,6 @@ class Library {
             switch (elem.getID() % 4) {
                 case that.Shelves.art.getCategoryID():
                     art += elem.createHTML();
-                    //TODO add event handler to each element or set it to cascade
                     break;
                 case that.Shelves.sci.getCategoryID():
                     sci += elem.createHTML();
@@ -56,19 +66,28 @@ class Library {
         sport += this.Shelves.art.createEndHTML();
         lit += this.Shelves.art.createEndHTML();
         HTML = HTML + art + sci + sport + lit + "</table>";
-        if (this.activeUser === 'admin') {
+        if (this.activeUser.name === 'admin') {
             HTML += Library.createHTMLForInput();
         }
         return HTML;
     }
 
+    /**
+     * Create additional HTML to add controls for admin view
+     * @returns {string}
+     */
     static createHTMLForInput() {
-        let HTML = "<input type='text' placeholder='Book Name' id='input-bkname'>";
+        let HTML = "<p id='desc'></p>";
+        HTML += "<input type='text' placeholder='Book Name' id='input-bkname'>";
         HTML += "<input type='text' placeholder='Shelf (Art, Science, etc.' id='input-sfname'>";
         HTML += "<input type='button' value='Add Book' id='btn-addbk'>";
         return HTML;
     }
 
+    /**
+     * Pull books from books.txt over ajax.
+     * @returns {Array}
+     */
     getBooks() {
         let received = null;
         let deserialized = [];
@@ -81,7 +100,7 @@ class Library {
             },
             //dataType: 'application/json; charset=utf-8',
             success: function (data) {
-                alert("Response from AJAX: \n" + data);
+                //alert("Response from AJAX: \n" + data);
                 received = JSON.parse(data || "[]");
             }
         });
@@ -91,6 +110,9 @@ class Library {
         let lib = this;
         received.forEach(function (elem) {
             deserialized.push(new Book(elem['name'], elem['borrowedBy'], elem['availability'], elem['id']));
+            if (elem['borrowedBy'] === lib.activeUser.name) {
+                lib.activeUser.borrowBook(elem['id']);
+            }
             //add book id to array to make it easier to add books later by reducing time complexity when searching
             // existing books for id conflicts when generating a new book id
             lib.BKIDS.push(elem['id']);
@@ -98,6 +120,9 @@ class Library {
         return deserialized;
     }
 
+    /**
+     * Add a new book to library
+     */
     addBook() {
         let $bk = $('#input-bkname');
         let $slf = $('#input-sfname');
@@ -115,14 +140,39 @@ class Library {
             }
             else {
                 this.Books.push(new Book($bk.val(), '', 1, bkid));
+                this.BKIDS.push(bkid);
                 this.Container.html(this.createHTML());
-                this.assignHandlers();
+                this.assignHandlersLibrarian();
                 this.pushBooks();
                 $slf.val();
                 $bk.val();
             }
         }
 
+    }
+
+    /**
+     * Get name of shelf book belongs to based on ID.
+     * @param bookID id of book
+     * @returns {*}
+     */
+    getShelfFromID(bookID) {
+        let shelf;
+        switch (bookID % 4) {
+            case this.Shelves.art.getCategoryID():
+                shelf = this.Shelves.art.category;
+                break;
+            case this.Shelves.sci.getCategoryID():
+                shelf = this.Shelves.sci.category;
+                break;
+            case this.Shelves.sport.getCategoryID():
+                shelf = this.Shelves.sport.category;
+                break;
+            case this.Shelves.lit.getCategoryID():
+                shelf = this.Shelves.lit.category;
+                break;
+        }
+        return shelf;
     }
 
     /**
@@ -158,14 +208,69 @@ class Library {
         }
     }
 
-    assignHandlers() {
+    /**
+     * Assign the necessary event handlers for the admin view of the library
+     */
+    assignHandlersLibrarian() {
         let lib = this;
         $('#btn-addbk').click(function (e) {
             e.preventDefault();
             lib.addBook();
         });
+        $('.book').click(function (e) {
+            let book = lib.Books[lib.BKIDS.indexOf(parseInt(this.id))];
+            $('#desc').html("\"" + book.name + "\"" +
+                (book.availability !== 1 ? (" is borrowed by: " + book.borrowedBy) : (" is available" )) +
+                " and belongs on shelf: " + lib.getShelfFromID(book.id));
+        });
     }
 
+    checkoutBook(book) {
+        book.borrowedBy = this.activeUser.name;
+        book.availability = 0;
+        this.activeUser.borrowBook(book.getID());
+        //update element on page so that it appears as checked out by user
+        $('#' + book.getID()).attr('class', 'book borrowed');
+        this.createHTML();
+        this.pushBooks();
+    }
+
+    returnBook(book) {
+        if (this.activeUser.returnBook(book.getID())) {
+            book.availability = 1;
+            book.borrowedBy = '';
+            //update element on page to appear as available
+            $('#' + book.getID()).attr('class', 'book available');
+            this.createHTML();
+            this.pushBooks();
+        }
+        else {
+            //condition where book is not available but is also not checked out by user, ie checked out by another user
+            alert("This book is not available!");
+        }
+    }
+
+    /**
+     * Assign the handlers for the undergrad view of the library
+     */
+    assignHandlersUndergrad() {
+        let lib = this;
+        $('.book').click(function (e) {
+            let book = lib.Books[lib.BKIDS.indexOf(parseInt(this.id))];
+            if (book.availability === 1) {
+                if (lib.activeUser.canCheckout()) {
+                    lib.checkoutBook(book);
+                }
+            }
+            else {
+                lib.returnBook(book);
+            }
+        });
+    }
+
+    /**
+     * Push current contents of Library.Books to books.txt over ajax.
+     */
     pushBooks() {
         $.ajax({
             url: "get_books.php",
@@ -175,6 +280,42 @@ class Library {
                 books: JSON.stringify(this.Books)
             },
         });
+    }
+
+
+}
+
+class User {
+    constructor(username) {
+        this.name = username;
+        this.numBooks = 0;
+        this.borrowed = [];
+    }
+
+    canCheckout() {
+        return this.numBooks < 2;
+    }
+
+    borrowBook(id) {
+        this.borrowed[this.numBooks] = id;
+        this.numBooks++;
+    }
+
+    returnBook(id) {
+        let loc = this.borrowed.indexOf(id);
+        if (loc >= 0) {
+            this.borrowed[this.borrowed.indexOf(id)] = '';
+            this.numBooks--;
+            return true;
+        }
+        else return false;
+    }
+
+    highlightBorrowed() {
+        let user = this;
+        this.borrowed.forEach(function (e) {
+            $('#' + e).attr('class', 'book borrowed');
+        })
     }
 }
 
@@ -206,7 +347,8 @@ class Book {
     }
 
     createHTML() {
-        let HTML = "<td id=\"" + this.id + "\">";
+        let HTML = "<td class='book " + (this.availability === 1 ? "available" : "unavailable");
+        HTML += "' id=\"" + this.id + "\">";
         HTML += this.name + "</td>";
         return HTML;
     }
