@@ -3,6 +3,7 @@
   <component name="JavaScriptLibraryMappings">
     <file url="file://$PROJECT_DIR$/src/homework_4/booksLibrary.js" libraries="{jQuery-2.0.0}" />
     <file url="file://$PROJECT_DIR$/src/homework_4/login.js" libraries="{jQuery-2.0.0}" />
+    <file url="file://$PROJECT_DIR$/src/homework_5/public/js/books/borrow.js" libraries="{jQuery-2.0.0}" />
     <file url="file://$PROJECT_DIR$/src/portfolio_1/helper.js" libraries="{jQuery-2.0.0}" />
     <file url="file://$PROJECT_DIR$/src/portfolio_1/steg.js" libraries="{jQuery-2.0.0}" />
   </component>
